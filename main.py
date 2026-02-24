@@ -93,7 +93,7 @@ def main():
     for i, code in enumerate(codes, 1):
         print(f"[{i}/{total_count}] 🔍 종목코드 ({code}) 차트 조회 중...", end="", flush=True)
 
-        time.sleep(0.3)
+        time.sleep(1.3)
 
         df = get_daily_ohlcv(BASE_URL, access_token, code)
 
