@@ -2,9 +2,9 @@ name: KRX OB+FVG Daily Scanner
 
 on:
   schedule:
-    # UTC 06:40 = KST 15:40 (장 마감 후)
+    # 한국 시간 오후 3시 40분 (장 마감 후) 실행
     - cron: '40 6 * * 1-5'
-  workflow_dispatch: # 수동 실행 버튼 활성화
+  workflow_dispatch:
 
 jobs:
   run-scanner:
@@ -26,10 +26,7 @@ jobs:
 
     - name: Run Scanner
       env:
-        # GitHub Settings > Secrets 에 등록된 값들을 불러옵니다.
-        KIWOOM_APP_KEY: ${{ secrets.KIWOOM_APP_KEY }}
-        KIWOOM_APP_SECRET: ${{ secrets.KIWOOM_APP_SECRET }}
-        KIWOOM_ACCOUNT: ${{ secrets.KIWOOM_ACCOUNT }}
+        KIWOOM_ACCESS_TOKEN: ${{ secrets.KIWOOM_ACCESS_TOKEN }}
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: python main.py
