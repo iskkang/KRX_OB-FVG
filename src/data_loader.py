@@ -5,30 +5,20 @@ from pykrx import stock
 
 def get_kospi200_codes():
     """
-    pykrx의 잦은 날짜 함수 버그를 원천 차단하기 위해,
-    어제 날짜부터 하루씩 역순으로 빼면서 시가총액 데이터가 존재하는 '최근 영업일'을 직접 찾습니다.
+    KOSPI 시가총액 상위 200개 종목 코드를 가져옵니다. (안전한 역순 탐색 방식)
     """
     KST = timezone(timedelta(hours=9))
-    
-    # 1. 어제 날짜부터 탐색 시작 (장 마감 시간대 미확정 데이터 회피)
     target_date = datetime.now(KST) - timedelta(days=1)
     
-    # 2. 최대 10일 전까지만 거슬러 올라감 (명절 연휴 방어)
     for _ in range(10):
         date_str = target_date.strftime("%Y%m%d")
-        
         try:
-            # 해당 날짜의 시가총액 데이터 요청
             df = stock.get_market_cap(date_str, market="KOSPI")
-            
-            # 3. 휴일이 아니라서 데이터가 존재한다면 즉시 200개 추출 후 종료
             if not df.empty:
                 codes = df.sort_values("시가총액", ascending=False).head(200).index.tolist()
                 return codes
         except Exception:
             pass
-            
-        # 데이터가 없으면(휴일이면) 하루 전으로 이동
         target_date -= timedelta(days=1)
         
     print("❌ 최근 영업일 데이터를 찾을 수 없습니다.")
@@ -36,18 +26,24 @@ def get_kospi200_codes():
 
 def get_daily_ohlcv(base_url, token, stock_code):
     """
-    키움 REST API를 통해 일봉 데이터를 조회합니다.
+    키움 REST API 문서(ka10081)를 반영한 일봉 차트 데이터 조회
     """
-    url = f"{base_url}/api/dostk/mrkcond" 
+    url = f"{base_url}/api/dostk/chart" 
     
     headers = {
         "content-type": "application/json;charset=UTF-8",
         "authorization": f"Bearer {token}",
-        "api-id": "ka10004" # ⚠️ (매우 중요) 첨부문서를 확인해보니 ka10004는 '주식호가' API입니다. 일봉 API ID를 키움증권에서 확인 후 반드시 변경하셔야 합니다.
+        "api-id": "ka10081" # 주식일봉차트조회요청
     }
     
+    # 한국 시간 기준 오늘 날짜 구하기
+    KST = timezone(timedelta(hours=9))
+    today_str = datetime.now(KST).strftime("%Y%m%d")
+    
     body = {
-        "stk_cd": f"KRX:{stock_code}"
+        "stk_cd": stock_code, # 예: "005930" (문서 예제 기준)
+        "base_dt": today_str, # 기준일자
+        "upd_stkpc_tp": "1"   # 수정주가 1:반영, 0:미반영
     }
     
     try:
@@ -57,18 +53,28 @@ def get_daily_ohlcv(base_url, token, stock_code):
             return pd.DataFrame()
 
         data = response.json()
-        daily_data = data.get('items', []) 
+        
+        # 문서에 명시된 일봉 데이터 리스트 키값
+        daily_data = data.get('stk_dt_pole_chart_qry', []) 
         
         if not daily_data:
             return pd.DataFrame()
             
         df = pd.DataFrame(daily_data)
         
+        # 문서에 명시된 응답 변수명(일자, 시가, 고가, 저가, 현재가(종가)) 매핑
+        df = df[['dt', 'open_pric', 'high_pric', 'low_pric', 'cur_prc']]
+        df.columns = ['date', 'open', 'high', 'low', 'close']
+        
+        # 시간순으로 정렬 (과거 데이터가 위로 오도록)
         df = df.sort_values('date').reset_index(drop=True)
+        
+        # 수치형 데이터로 변환 (음수 기호 등 처리)
         cols = ['open', 'high', 'low', 'close']
-        df[cols] = df[cols].apply(pd.to_numeric)
+        df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
         
         return df
 
-    except Exception:
+    except Exception as e:
+        print(f"[{stock_code}] 차트 조회 에러: {e}")
         return pd.DataFrame()
