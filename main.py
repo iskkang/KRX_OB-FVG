@@ -156,7 +156,7 @@ def main():
         return
 
     # --- universe
-    codes = get_kospi200_codes()
+    codes = get_kospi200_codes(BASE_URL, access_token)
     total = len(codes)
     print(f"✅ 대상 종목 수: {total}개", flush=True)
 
