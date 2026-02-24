@@ -15,7 +15,7 @@ def get_kospi200_codes():
         try:
             df = stock.get_market_cap(date_str, market="KOSPI")
             if not df.empty:
-                codes = df.sort_values("시가총액", ascending=False).head(200).index.tolist()
+                codes = df.sort_values("시가총액", ascending=False).head(800).index.tolist()
                 return codes
         except Exception:
             pass
