@@ -1,6 +1,5 @@
 import os
 import time
-from pykrx import stock
 from src.data_loader import get_kospi200_codes, get_daily_ohlcv
 from src.strategy import check_ob_fvg_signal
 from src.telegram_bot import send_message
@@ -10,7 +9,6 @@ ACCESS_TOKEN = os.getenv("KIWOOM_ACCESS_TOKEN")
 TG_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# 키움 모의투자 도메인
 BASE_URL = "https://mockapi.kiwoom.com"
 
 def main():
@@ -30,11 +28,7 @@ def main():
 
     # 2. 스캔 시작
     for i, code in enumerate(codes, 1):
-        # 종목코드 -> 종목명 변환
-        stock_name = stock.get_market_ticker_name(code)
-        
-        # 🔍 Actions 로그에 어떤 종목을 스캔하는지 실시간 출력
-        print(f"[{i}/{total_count}] 🔍 {stock_name} ({code}) 차트 조회 중...", end="", flush=True)
+        print(f"[{i}/{total_count}] 🔍 종목코드 ({code}) 차트 조회 중...", end="", flush=True)
 
         # API 제한 고려 (0.3초 대기)
         time.sleep(0.3)
@@ -42,7 +36,6 @@ def main():
         # 차트 데이터 조회
         df = get_daily_ohlcv(BASE_URL, ACCESS_TOKEN, code)
         
-        # 🚨 차트 데이터가 비어있는 경우 (너무 빨리 스캔이 끝나는 진짜 이유)
         if df.empty:
             print(f" ⚠️ 데이터 없음 (API 오류 또는 스킵)", flush=True)
             continue
@@ -54,7 +47,7 @@ def main():
             entry, sl, tp = prices
             msg = (
                 f"🎯 **[OB+FVG] 타점 포착**\n"
-                f"종목: {stock_name} (`{code}`)\n"
+                f"종목코드: `{code}`\n"
                 f"진입: {entry:,.0f}원\n"
                 f"손절: {sl:,.0f}원\n"
                 f"익절: {tp:,.0f}원\n"
@@ -62,7 +55,7 @@ def main():
             )
             print(f" 👉 🎯 타점 포착!", flush=True)
             send_message(TG_TOKEN, TG_CHAT_ID, msg)
-            found_stocks.append(stock_name)
+            found_stocks.append(code)
         else:
             print(f" ➖ 시그널 없음", flush=True)
 
