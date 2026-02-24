@@ -5,6 +5,11 @@ on:
     - cron: '40 6 * * 1-5'
   workflow_dispatch:
 
+# 🔴 바로 여기
+concurrency:
+  group: krx-ob-fvg-scanner
+  cancel-in-progress: true
+
 jobs:
   run-scanner:
     runs-on: ubuntu-latest
@@ -25,7 +30,6 @@ jobs:
 
     - name: Run Scanner
       env:
-        # ACCESS_TOKEN 대신 APP_KEY와 APP_SECRET을 넘겨줍니다.
         KIWOOM_APP_KEY: ${{ secrets.KIWOOM_APP_KEY }}
         KIWOOM_APP_SECRET: ${{ secrets.KIWOOM_APP_SECRET }}
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
