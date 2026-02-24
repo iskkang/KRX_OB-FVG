@@ -1,28 +1,27 @@
 import requests
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from pykrx import stock
+import FinanceDataReader as fdr
 
 def get_kospi200_codes():
     """
-    KOSPI 시가총액 상위 200개 종목 코드를 가져옵니다. (안전한 역순 탐색 방식)
+    해외 IP(GitHub Actions) 차단을 피하기 위해 pykrx 대신 FinanceDataReader를 사용합니다.
+    코스피 전 종목을 불러온 뒤 시가총액(Marcap) 상위 200개 종목을 추출합니다.
     """
-    KST = timezone(timedelta(hours=9))
-    target_date = datetime.now(KST) - timedelta(days=1)
-    
-    for _ in range(10):
-        date_str = target_date.strftime("%Y%m%d")
-        try:
-            df = stock.get_market_cap(date_str, market="KOSPI")
-            if not df.empty:
-                codes = df.sort_values("시가총액", ascending=False).head(800).index.tolist()
-                return codes
-        except Exception:
-            pass
-        target_date -= timedelta(days=1)
+    try:
+        # 코스피 전 종목 데이터 가져오기 (시가총액 포함)
+        df = fdr.StockListing('KOSPI')
         
-    print("❌ 최근 영업일 데이터를 찾을 수 없습니다.")
-    return []
+        # 시가총액(Marcap) 기준으로 내림차순 정렬 후 상위 200개 자르기
+        top200_df = df.sort_values('Marcap', ascending=False).head(200)
+        
+        # 종목코드만 리스트로 추출
+        codes = top200_df['Code'].tolist()
+        return codes
+        
+    except Exception as e:
+        print(f"❌ 종목 코드를 불러오는데 실패했습니다: {e}")
+        return []
 
 def get_daily_ohlcv(base_url, token, stock_code):
     """
@@ -41,7 +40,7 @@ def get_daily_ohlcv(base_url, token, stock_code):
     today_str = datetime.now(KST).strftime("%Y%m%d")
     
     body = {
-        "stk_cd": stock_code, # 예: "005930" (문서 예제 기준)
+        "stk_cd": stock_code,
         "base_dt": today_str, # 기준일자
         "upd_stkpc_tp": "1"   # 수정주가 1:반영, 0:미반영
     }
@@ -62,14 +61,14 @@ def get_daily_ohlcv(base_url, token, stock_code):
             
         df = pd.DataFrame(daily_data)
         
-        # 문서에 명시된 응답 변수명(일자, 시가, 고가, 저가, 현재가(종가)) 매핑
+        # 문서에 명시된 응답 변수명 매핑
         df = df[['dt', 'open_pric', 'high_pric', 'low_pric', 'cur_prc']]
         df.columns = ['date', 'open', 'high', 'low', 'close']
         
         # 시간순으로 정렬 (과거 데이터가 위로 오도록)
         df = df.sort_values('date').reset_index(drop=True)
         
-        # 수치형 데이터로 변환 (음수 기호 등 처리)
+        # 수치형 데이터로 변환
         cols = ['open', 'high', 'low', 'close']
         df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
         
