@@ -1,21 +1,65 @@
 import os
 import time
+import requests
 from src.data_loader import get_kospi200_codes, get_daily_ohlcv
 from src.strategy import check_ob_fvg_signal
 from src.telegram_bot import send_message
 
-# GitHub Secrets에서 환경변수 로드
-ACCESS_TOKEN = os.getenv("KIWOOM_ACCESS_TOKEN")
+# GitHub Secrets에서 APP_KEY와 APP_SECRET 로드
+APP_KEY = os.getenv("KIWOOM_APP_KEY")
+APP_SECRET = os.getenv("KIWOOM_APP_SECRET")
 TG_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 BASE_URL = "https://mockapi.kiwoom.com"
 
+def get_access_token():
+    """
+    APP_KEY와 APP_SECRET을 이용해 키움증권 REST API 토큰을 자동 발급받습니다.
+    (키움증권 au10001 접근토큰 발급 API 기준)
+    """
+    print("🔑 [인증] 접근 토큰(Access Token) 자동 발급을 시도합니다...", flush=True)
+    # 토큰 발급은 일반적으로 운영 도메인(api.kiwoom.com) 또는 oauth2 엔드포인트를 사용합니다.
+    # 키움 OpenAPI+ REST 가이드에 맞춘 일반적인 인증 형태입니다.
+    url = "https://api.kiwoom.com/oauth2/tokenP"
+    
+    headers = {"content-type": "application/json"}
+    body = {
+        "grant_type": "client_credentials",
+        "appkey": APP_KEY,
+        "appsecret": APP_SECRET
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=body)
+        data = response.json()
+        
+        token = data.get("access_token")
+        if token:
+            print(" ✅ 토큰 발급 성공!", flush=True)
+            return token
+        else:
+            print(f" ❌ 토큰 발급 실패: {data}", flush=True)
+            return None
+    except Exception as e:
+        print(f" ❌ 토큰 요청 중 에러 발생: {e}", flush=True)
+        return None
+
 def main():
     print("🚀 [GitHub Actions] KRX OB+FVG 스캐너 시작", flush=True)
     send_message(TG_TOKEN, TG_CHAT_ID, "🚀 **[GitHub Actions] 코스피200 OB+FVG 스캔 시작**")
 
-    # 1. 대상 종목 리스트 확보
+    # 1. 자동 토큰 발급 (핵심 로직 추가)
+    if not APP_KEY or not APP_SECRET:
+        print("❌ 환경변수에 KIWOOM_APP_KEY 또는 KIWOOM_APP_SECRET이 없습니다.", flush=True)
+        return
+        
+    access_token = get_access_token()
+    if not access_token:
+        print("❌ 토큰이 없어 차트 조회를 진행할 수 없습니다. 프로그램을 종료합니다.", flush=True)
+        return
+
+    # 2. 대상 종목 리스트 확보
     codes = get_kospi200_codes()
     total_count = len(codes)
     print(f"✅ 대상 종목 수: {total_count}개", flush=True)
@@ -26,15 +70,14 @@ def main():
 
     found_stocks = []
 
-    # 2. 스캔 시작
+    # 3. 스캔 시작 (발급받은 access_token 사용)
     for i, code in enumerate(codes, 1):
         print(f"[{i}/{total_count}] 🔍 종목코드 ({code}) 차트 조회 중...", end="", flush=True)
 
-        # API 제한 고려 (0.3초 대기)
-        time.sleep(0.3)
+        time.sleep(0.3) # API 트래픽 제한 방어
         
-        # 차트 데이터 조회
-        df = get_daily_ohlcv(BASE_URL, ACCESS_TOKEN, code)
+        # 차트 데이터 조회 (발급받은 토큰 전달)
+        df = get_daily_ohlcv(BASE_URL, access_token, code)
         
         if df.empty:
             print(f" ⚠️ 데이터 없음 (API 오류 또는 스킵)", flush=True)
@@ -59,7 +102,7 @@ def main():
         else:
             print(f" ➖ 시그널 없음", flush=True)
 
-    # 3. 종료
+    # 4. 종료
     end_msg = f"🏁 **스캔 완료**\n총 {len(found_stocks)} 종목 발견"
     print("\n" + end_msg, flush=True)
     send_message(TG_TOKEN, TG_CHAT_ID, end_msg)
