@@ -5,36 +5,34 @@ from pykrx import stock
 
 def get_kospi200_codes():
     """
-    pykrx를 이용해 KOSPI 시가총액 상위 200개 종목 코드를 가져옵니다.
-    안전하게 '가장 최근에 확정된 과거 영업일' 데이터를 사용합니다.
+    pykrx의 잦은 날짜 함수 버그를 원천 차단하기 위해,
+    어제 날짜부터 하루씩 역순으로 빼면서 시가총액 데이터가 존재하는 '최근 영업일'을 직접 찾습니다.
     """
     KST = timezone(timedelta(hours=9))
-    now = datetime.now(KST)
     
-    start_date = (now - timedelta(days=10)).strftime("%Y%m%d")
-    end_date = (now - timedelta(days=1)).strftime("%Y%m%d")
+    # 1. 어제 날짜부터 탐색 시작 (장 마감 시간대 미확정 데이터 회피)
+    target_date = datetime.now(KST) - timedelta(days=1)
     
-    # 수정완료: get_business_days_dates -> get_business_days
-    biz_days = stock.get_business_days(start_date, end_date)
-    
-    # DatetimeIndex가 비어있는지 확인
-    if len(biz_days) == 0:
-        return []
+    # 2. 최대 10일 전까지만 거슬러 올라감 (명절 연휴 방어)
+    for _ in range(10):
+        date_str = target_date.strftime("%Y%m%d")
         
-    target_date = biz_days[-1].strftime("%Y%m%d")
-    
-    try:
-        df = stock.get_market_cap(target_date, market="KOSPI")
-        
-        if df.empty:
-            return []
+        try:
+            # 해당 날짜의 시가총액 데이터 요청
+            df = stock.get_market_cap(date_str, market="KOSPI")
             
-        codes = df.sort_values("시가총액", ascending=False).head(200).index.tolist()
-        return codes
+            # 3. 휴일이 아니라서 데이터가 존재한다면 즉시 200개 추출 후 종료
+            if not df.empty:
+                codes = df.sort_values("시가총액", ascending=False).head(200).index.tolist()
+                return codes
+        except Exception:
+            pass
+            
+        # 데이터가 없으면(휴일이면) 하루 전으로 이동
+        target_date -= timedelta(days=1)
         
-    except Exception as e:
-        print(f"코스피 200 종목 조회 실패: {e}")
-        return []
+    print("❌ 최근 영업일 데이터를 찾을 수 없습니다.")
+    return []
 
 def get_daily_ohlcv(base_url, token, stock_code):
     """
@@ -45,7 +43,7 @@ def get_daily_ohlcv(base_url, token, stock_code):
     headers = {
         "content-type": "application/json;charset=UTF-8",
         "authorization": f"Bearer {token}",
-        "api-id": "ka10004" # 주의: 올려주신 문서의 ka10004는 '주식호가요청' 입니다. 일봉 데이터를 받으려면 일봉 API ID로 변경해야 합니다.
+        "api-id": "ka10004" # ⚠️ (매우 중요) 첨부문서를 확인해보니 ka10004는 '주식호가' API입니다. 일봉 API ID를 키움증권에서 확인 후 반드시 변경하셔야 합니다.
     }
     
     body = {
