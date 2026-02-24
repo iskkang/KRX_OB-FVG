@@ -4,29 +4,36 @@ import datetime
 from pykrx import stock
 
 def get_kospi200_codes():
-    """pykrx를 이용해 최신 코스피 200 종목 코드를 가져옵니다."""
+    """
+    pykrx를 이용해 KOSPI 시가총액 상위 200개 종목 코드를 가져옵니다.
+    (인덱스 코드 오류를 방지하기 위해 시가총액 정렬 방식을 사용합니다.)
+    """
     today = datetime.datetime.today().strftime("%Y%m%d")
-    codes = stock.get_index_ticker_list(today, "1028")
     
-    if not codes:
+    # 1. 코스피 전 종목 시가총액 데이터 조회 (DataFrame 반환)
+    df = stock.get_market_cap(today, market="KOSPI")
+    
+    # 2. 주말이나 휴일이라 오늘 데이터가 비어있다면 최근 영업일로 재조회
+    if df.empty:
         target_date = stock.get_nearest_business_day_in_a_week(datetime.datetime.now().strftime("%Y%m%d"))
-        codes = stock.get_index_ticker_list(target_date, "1028")
+        df = stock.get_market_cap(target_date, market="KOSPI")
+        
+    # 3. 시가총액(Market Cap) 내림차순 정렬 후 상위 200개의 종목코드만 리스트로 추출
+    codes = df.sort_values("시가총액", ascending=False).head(200).index.tolist()
         
     return codes
 
 def get_daily_ohlcv(base_url, token, stock_code):
     """
     키움 REST API를 통해 일봉 데이터를 조회합니다.
-    (일봉 조회의 API ID 및 URL은 공식 문서의 일별 데이터 조회 엔드포인트에 맞게 조정 필요)
     """
     # 임시 URL (실제 키움 REST API의 '국내주식 일봉 데이터' 엔드포인트 입력)
-    url = f"{base_url}/api/dostk/mrkcond" # <-- 제공된 문서에 따른 임시 URL. (실제 일봉 API URL로 교체 필요)
+    url = f"{base_url}/api/dostk/mrkcond" 
     
-    # 키움 REST API 문서 기준 Header
     headers = {
         "content-type": "application/json;charset=UTF-8",
         "authorization": f"Bearer {token}",
-        "api-id": "ka10004" # <-- 실제 일봉 차트 조회를 위한 api-id로 변경 필요 (ka10004는 호가요청)
+        "api-id": "ka10004" 
     }
     
     body = {
@@ -34,7 +41,6 @@ def get_daily_ohlcv(base_url, token, stock_code):
     }
     
     try:
-        # 키움 REST API는 Body에 값을 담아 POST 형식으로 요청할 수 있습니다.
         response = requests.post(url, headers=headers, json=body)
         
         if response.status_code != 200:
@@ -43,17 +49,12 @@ def get_daily_ohlcv(base_url, token, stock_code):
         data = response.json()
         
         # --- (주의) 응답 파싱 로직 ---
-        # 실제 일봉 데이터가 담겨오는 JSON의 Key 값에 맞춰 아래 'items' 등을 수정하셔야 합니다.
         daily_data = data.get('items', []) 
         
         if not daily_data:
             return pd.DataFrame()
             
         df = pd.DataFrame(daily_data)
-        
-        # 컬럼명 매핑 (API 응답값의 날짜, 시가, 고가, 저가, 종가 변수명으로 교체)
-        # ex) df = df[['date', 'open', 'high', 'low', 'close']]
-        # df.columns = ['date', 'open', 'high', 'low', 'close']
         
         df = df.sort_values('date').reset_index(drop=True)
         cols = ['open', 'high', 'low', 'close']
