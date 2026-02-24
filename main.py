@@ -1,43 +1,34 @@
 import os
 import time
-from src.auth import get_access_token
 from src.data_loader import get_kospi200_codes, get_daily_ohlcv
 from src.strategy import check_ob_fvg_signal
 from src.telegram_bot import send_message
 
 # GitHub Secrets에서 환경변수 로드
-APP_KEY = os.getenv("KIWOOM_APP_KEY")
-APP_SECRET = os.getenv("KIWOOM_APP_SECRET")
-ACCOUNT = os.getenv("KIWOOM_ACCOUNT")
+ACCESS_TOKEN = os.getenv("KIWOOM_ACCESS_TOKEN")
 TG_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# 모의투자 URL
-BASE_URL = "https://openapivts.kiwoom.com:29443"
+# 키움 모의투자 도메인 (제공해주신 문서 반영)
+BASE_URL = "https://mockapi.kiwoom.com"
 
 def main():
     print("🚀 [GitHub Actions] KRX OB+FVG 스캐너 시작")
     send_message(TG_TOKEN, TG_CHAT_ID, "🚀 **[GitHub Actions] 코스피200 OB+FVG 스캔 시작**")
 
-    # 1. 토큰 발급 (자동 로그인)
-    token = get_access_token(BASE_URL, APP_KEY, APP_SECRET)
-    if not token:
-        send_message(TG_TOKEN, TG_CHAT_ID, "❌ API 토큰 발급 실패. 스캔을 중단합니다.")
-        return
-
-    # 2. 종목 리스트 확보
+    # 1. 대상 종목 리스트 확보
     codes = get_kospi200_codes()
     print(f"대상 종목 수: {len(codes)}개")
     
     found_stocks = []
 
-    # 3. 스캔 시작
+    # 2. 스캔 시작
     for i, code in enumerate(codes):
-        # API 제한 고려 (0.2초 대기)
-        time.sleep(0.2)
+        # API 제한 고려 (초당 호출 제한 방지)
+        time.sleep(0.3)
         
-        # 데이터 조회
-        df = get_daily_ohlcv(BASE_URL, token, APP_KEY, APP_SECRET, ACCOUNT, code)
+        # 차트 데이터 조회 (키움 모의투자 API)
+        df = get_daily_ohlcv(BASE_URL, ACCESS_TOKEN, code)
         
         # 전략 판별
         is_signal, prices = check_ob_fvg_signal(df)
@@ -56,7 +47,7 @@ def main():
             send_message(TG_TOKEN, TG_CHAT_ID, msg)
             found_stocks.append(code)
 
-    # 4. 종료
+    # 3. 종료
     end_msg = f"🏁 **스캔 완료**\n총 {len(found_stocks)} 종목 발견"
     print(end_msg)
     send_message(TG_TOKEN, TG_CHAT_ID, end_msg)
