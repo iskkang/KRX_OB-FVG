@@ -16,18 +16,22 @@ BASE_URL = "https://mockapi.kiwoom.com"
 def get_access_token():
     """
     APP_KEY와 APP_SECRET을 이용해 키움증권 REST API 토큰을 자동 발급받습니다.
-    (키움증권 au10001 접근토큰 발급 API 기준)
     """
     print("🔑 [인증] 접근 토큰(Access Token) 자동 발급을 시도합니다...", flush=True)
-    # 토큰 발급은 일반적으로 운영 도메인(api.kiwoom.com) 또는 oauth2 엔드포인트를 사용합니다.
-    # 키움 OpenAPI+ REST 가이드에 맞춘 일반적인 인증 형태입니다.
-    url = "https://api.kiwoom.com/oauth2/tokenP"
     
-    headers = {"content-type": "application/json"}
+    # ❌ 기존 오류: tokenP (타 증권사) -> ✅ 수정: token (키움증권)
+    url = f"{BASE_URL}/oauth2/token"
+    
+    headers = {
+        "content-type": "application/json",
+        "api-id": "au10001"
+    }
+    
     body = {
         "grant_type": "client_credentials",
         "appkey": APP_KEY,
-        "appsecret": APP_SECRET
+        # ❌ 기존 오류: appsecret -> ✅ 수정: secretkey (키움증권 규격)
+        "secretkey": APP_SECRET 
     }
     
     try:
@@ -49,7 +53,7 @@ def main():
     print("🚀 [GitHub Actions] KRX OB+FVG 스캐너 시작", flush=True)
     send_message(TG_TOKEN, TG_CHAT_ID, "🚀 **[GitHub Actions] 코스피200 OB+FVG 스캔 시작**")
 
-    # 1. 자동 토큰 발급 (핵심 로직 추가)
+    # 1. 자동 토큰 발급
     if not APP_KEY or not APP_SECRET:
         print("❌ 환경변수에 KIWOOM_APP_KEY 또는 KIWOOM_APP_SECRET이 없습니다.", flush=True)
         return
@@ -74,9 +78,9 @@ def main():
     for i, code in enumerate(codes, 1):
         print(f"[{i}/{total_count}] 🔍 종목코드 ({code}) 차트 조회 중...", end="", flush=True)
 
-        time.sleep(0.3) # API 트래픽 제한 방어
+        time.sleep(0.3) 
         
-        # 차트 데이터 조회 (발급받은 토큰 전달)
+        # 차트 데이터 조회
         df = get_daily_ohlcv(BASE_URL, access_token, code)
         
         if df.empty:
